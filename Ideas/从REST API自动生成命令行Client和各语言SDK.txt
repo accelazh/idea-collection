@@ -1,0 +1,4 @@
+在代码中写好函数，
+	然后生成REST的HTTP的API，已经有人做了
+	然后生成操作REST API的图形化Web页面，已经有人做了，入swagger UI
+	还要生成Linux命令行终端，例子有csm。还要再生成java、python等各种语言的SDK。这一部分不知道有没有自动生成工具，如果没有，我们可以做一个。

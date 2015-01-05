@@ -1,0 +1,209 @@
+1. 用Stripping的方法，将strip小块分布在多个物理机上，即使不用replica，也可以实现Parallel读。
+   ceph也用了。
+
+2. Coarse Grained Capability。一个Capability包里，包含许多user name和许多file name。直接写肯定写不下，我们只写它们的markov tree的root哈希值（user name list和file name list一人一个哈希值）。
+   验证端拿到了这个capability包，如何知道其中的哈希值到底表示什么user name和file name。原来有一份全局的映射文件。当然，它很大，因此还需要考虑cache问题。
+   merkle tree的好处是，你需要新的list了，把tree和tree（leaf）合一下，生成一个新的树就可以了。
+
+3. batch requests。
+   另一方面batch是一种思想，比如把object给batch成placement group以方便管理，将删除攒够一定数量批量处理。造成性能问题的往往是数据量大，但是许多数据可能是同质的，因此把同质数据group起来，让系统去以group为处理单元而不是细粒度的数据，这样也许能够提高性能。
+
+4. 夹带data在requests
+
+5. 通过cache某个东西，减少做一件事的次数。比如服务器会接受到一堆客户请求，其实大多都是一样的，这时就不用每个都重新计算了。计算一次然后cache即可。
+
+6. 分布式存储中，有些file非常hot；有些时间会由burst式的大量访问。针对这两点，需要考虑优化。
+   另一方面，一些操作总是会与下一个操作关联，比如cd和ls。a request is indicative for subsequent requests. 这也是可以优化的地方。
+
+7. QoS是经常有的需求，不光network和video系统中有，Object Storage中也有。作为一个高级功能，需要考虑如何设计。
+   OoS中quota共享的问题，可以用树解决。A和B是leaf，流量quota在root上。A没用完的quota，B可以继续用。
+   一个常用的实现思路是使用token来表示被分配的quota，例如一个token 10KB。用完没有，定时发放。
+
+8. Swift的partition和Ceph的PlacementGroup和dynamo的VirtualNode。partition可以理解为一个装有一定数量对象的块。为什么要将object先hash映射到partition，然后再想办法把partition映射到device？http://docs.openstack.org/developer/swift/overview_ring.html的history部分的最后一点有讲。
+   总之，在分布式对象存储系统中，这种先partition，再映射的device，将partition作为一个中间映射步骤的做法，似乎能够很好地提高效率，尤其是replica的。
+
+9. 如何提高性能：
+     1. use better hardware
+     2. deploy better
+     3. make the code better
+
+10. MVCC: Multi-versioned Concurrency Control
+
+11. ceph中也许可以用上log structured storage思路，或者cache oblivious B-Tree的思路？
+    Log Structured Storage，按照写log的方式写数据，append and don't delete。实际上这和“记录事件而不是记录数据值”的思想相似。另一方面，这种做法取代了数据库常用的WAL日志，成了数据即日志。也许这种数据存储可以打破CAP的限制，造出更加高效的存储系统。也可以看看ceph中有没有用得上的地方。
+
+12. XOR运算有奇特的用处，比如A XOR B XOR A = B。Storm框架用XOR实现了对message在哪个节点上处理了、哪个节点上没处理的跟踪，见http://xumingming.sinaapp.com/127/twitter-storm%E5%A6%82%E4%BD%95%E4%BF%9D%E8%AF%81%E6%B6%88%E6%81%AF%E4%B8%8D%E4%B8%A2%E5%A4%B1/
+
+13. 大型集群上，机子挂掉是常事，因而不断制造replication的网络流量。如果能够减少机子挂掉的比率，那么会节省一些网络流量。
+
+14. LevelDB代表的SSTable+LSM-Tree的设计风格的NoSQL数据库
+
+15. 有的时候，数据之间会存在较一致的统计分布关系。可以利用这种关系进行优化，尽管会产生可容忍的小量误差。
+    参考：走进“开心农场主”：游戏数据分析的架构及调优：http://www.csdn.net/article/2013-11-21/2817586的“采样”一节。
+
+16. 将请求合并batch执行。比如SQL查询，许多个SQL查询，可能都扫描了一张表。那么可以把它们合并成一次扫描。这才是利用了batch。下面的参考中，这被称作logical plan的合并。
+    参考：走进“开心农场主”：游戏数据分析的架构及调优：http://www.csdn.net/article/2013-11-21/2817586的“合并与物理计划执行方式的改进”一节。
+
+17. bloom filter
+
+18. may be data aware 会很有帮助：
+	例如：很多数据是json、xml --- nested data structure。这些数据结构现在非常常用。
+        ceph如果能够对它们感知，也许能够进行特定的优化。
+
+    推而广之，存储系统可以为不同类型的data模式提供特定的优化。多提供几种优化方案，让用户选择最合适它们的data模式的配置。这也许可以成为一种存储系统的优化方法。
+
+    进一步推而广之，存储系统现在都是通用系统，通用总是不及专用能够更高效，那么往专有场景作特定优化，也许是一个可以产生许多新Idea的方向。可以提供多种加成优化方案供选择，因而不失通用性。
+
+19. 服务器，有请求时是忙的，没有请求时是闲的。请求时一个个来的，服务器很可能是忙闲间隔。那么如何利用这些闲的时间呢？
+    一种方法，是把请求只做一半尽快返回，下一半后头慢慢做。比如ceph的client写的方式。
+
+20. 对象存储削减成本的主要手段包括消重和Erasure Code。 —— 《程序员》2013.09 对象存储服务的技术选型（下）
+
+21. 分布式系统常常为了避免多次IO做出很多努力。实际上，IO常常是因为内存不够用，更加节约内存的程序能避免IO，从而更加高效。Java在这方面就差很多了，而Java的SDK集合类，相比其它开源实现如trove，非常浪费内存。
+
+22. lucene中，底层序列化基本数据类型时，为了所见长度，采用的vInt、vLang等格式。
+
+23. GPU并行计算
+
+24. File System Allocate-on-flush, or Delayed-Allocation, to mitigate fragmentation.
+	ref: http://en.wikipedia.org/wiki/Delayed_allocation
+
+25. The most power-efficient way for a system to operate is to do work as quickly as possible, go into the deepest sleep state possible, and sleep as long as possible. To implement this, Red Hat Enterprise Linux 6 uses a tickless kernel. With this, the interrupt timer has been removed from the idle loop, transforming Red Hat Enterprise Linux 6 into a completely interrupt-driven environment.
+
+	https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html-single/Performance_Tuning_Guide/index.html
+
+26. 要省电，server consolidation虽然理论上要求shared storage（这个我们没有），但是，如果服务是无状态的，那就可以不一样了。无状态服务不需要shared storage，也可以随便移动，因为它们都一样。在一边关一个，另一边起一个都可以。
+   配合上auto scaling，这个就会变得非常有效。
+
+----------------------------------------------
+[2014-4-14]
+
+27. 读ceph的monitor和paxos代码，总结其
+	1. 大量使用断言和自检函数，以及health check、tick check，这已经不是新方法
+	2. 大量的timer/timeout的使用，几乎算法的每一阶段都有timeout保护，如果超时则重启。timeout逻辑由统一类分担。
+	3. 持久化数据，使用leveldb存储，并且利用其提供的原子操作和transaction。许多应用中，应该都有存储数据的要求，其实都可效仿此法。或干脆用mysql等数据库。
+
+----------------------------------------------
+[2014-4-29]
+
+28. Erasure Code，作为Replication之外的第二种保护Data安全的方法
+	1. http://www.cs.utexas.edu/users/lam/395t/slides/ErasureCodes.pdf
+	2. 使用了线性方程组的解
+	3. 有限域/Galois field
+
+29. Gossip Protocol:
+	1. http://blog.csdn.net/chen77716/article/details/6275762
+           http://blog.csdn.net/yfkiss/article/details/6943682
+           http://www.jsjkx.com/jsjkx/ch/reader/create_pdf.aspx?file_no=101105&flag=&journal_id=jsjkx&year_id=2010
+
+30. ceph中，odd、pg等都有一个整数id，这使许多数据结构的构建和存储能够更压缩。
+
+-----------------------------------------------
+[2014-5-10]
+
+31. ceph的pg设计。object按pg组在一起。在一台server上，有大量pg，每个pg的备份server各不相同，分别错开。当这台server挂掉时，其上的pg可以同时，向许多其它server迁移备份。
+    这种“错开”的方式，使得备份恢复，或可能的其它“大型”操作，变得能够均衡分散开来。
+
+    同上：
+    ceph的pg，primary+2replica是一组。一个osd上，host着许多pg，属于许多pg组，pg组和osd是互相交错的。这种设计，假如一个osd挂了，其上的各个pg组可以并行地恢复到众多osd中，使得恢复速度大大提高。
+           相比swift，恢复时是一个server为单位，而不是pg组。这样就无法像ceph一样把各个pg组并行恢复了。总之，ceph通过pg设计使数据有了更好的交错性。
+
+-----------------------------------------------
+[2014-6-12]
+
+32. ceph的message throttle和backfill reservation机制。这些设计使得ceph的消息传输和数据恢复时，能够控制网络流量，避免将集群的网络占用过多导致服务质量下降。
+    反例是ceph的scrubbing，由于流量控制不力，造成服务下降问题：https://www.usenix.org/publications/login/june14/giannakos （见“Experiences from Production”部分）
+
+33. ceph对silent data corruption的预防：增加scrubbing功能。即后台scrubbing检查primary和replica的数据，看看checksum是否仍然一致，以及进行primary和replica之间对比数据一致。
+
+-----------------------------------------------
+[2014-8-18]
+
+34. pre-built XXX. 根据需要，用代码生成代码，为每个user程序都生成一个最合适最优化的库来用。
+
+35. refer to "Cache efficient programming"
+      cache优化的本质是
+        (1) 从单线程视角，想方设法提高locality (spacial locality & temporal locality)
+              smaller type/mem, mem packing, avoid aligment holes, separate/pack hot data, regular access pattern, iterate in continuous mem, break objects into continously-iterated sequence, favor linear structures
+        (2) 从多线程视角，
+              一是避免锁，和减少锁的范围
+                  atomic, cas, volatile, non-locking alogrithm, spin-wait/lock, claim-write, double-checked-lock, versioning, lock/work time consumption ratio decides whether need to remove lock, lock-striping: divide lock by user group
+              二是避免thread互相cache invalidate
+                  cacheline padding, separate threads' cacheline on hot write variable, be aware of false sharing, avoid multi-thread contention on same variable, thread local, breaking contention variable into copies per thread
+        (3) 利用根据程序/结构的特性优化
+              比如序结构，只读性，依赖图的易切点
+
+	reference: 
+      What Every Programmer Should Know About Memory: http://www.akkadia.org/drepper/cpumemory.pdf
+      Stackoverflow's: http://stackoverflow.com/questions/763262/how-does-one-write-code-that-best-utilizes-the-cpu-cache-to-improve-performance
+
+-------------------------------------------------
+[2014-9-3]
+
+36. 最直接，也可能是最有效的优化效率的方式————做更少的事。
+   
+   虽然现在流行使用各种框架，用别人的库。相对与你的程序所需，这些框架/库为了通用性，往往需要最很多多余的事。自己重新写一个最小的版本，不做多余的事，反而能快得多。所以c/c++派总喜欢自己重写一套吧...
+
+   ref: C++ 为核心语言的高频交易系统是如何做到低延迟？
+        http://www.zhihu.com/question/23185359/answer/23853729 陈硕的答案
+
+-------------------------------------------------
+[2014-9-6]
+
+37. bounding box, envelope and lower bounds (were used in time-series calculations)
+   early abandoning and pruning (this is a big deal)
+   算法的快慢不仅是O(N^x)级别上的优化，同数量级下的改进还有很多内容。
+   refer to: 
+      Searching and Mining Trillions of Time Series Subsequences under Dynamic Time Warping: http://www.cs.ucr.edu/~eamonn/SIGKDD_trillion.pdf
+
+   另，为了减小计算量，dimensionality reduction也是常用方法。
+      例如，time-series的resolution从second调到hour；计算前先PAA（piecewise aggregate approximation）的方法；motifs寻找前先SAX（Symbolic Aggregate approXimation）方法
+
+38. data locality awareness
+   分析框架一般有存储系统计算框架组成（如Hadoop、Spark、Storm）。让计算在数据所在的结点上运行，如Hadoop的MapReduce，可以大幅提升效率。
+
+--------------------------------------------------
+[2014-10-28]
+
+39. RAMCloud的最大意义可能是，终于可以只把顺序操作留给硬盘，从而以往所有对存储系统对硬盘特设的优化都没有必要了。
+   http://blog.csdn.net/anzhsoft/article/details/21830991
+
+40. memory allocator分为copying（java gc）和non-copying（malloc）。copying连续分配内存，最后用copy搬家、compact、新老代处理垃圾回收问题。segment和seglet进一步帮助。分grid+并发和分批缓解gc延迟。hashtable+fine grained lock解决地址重映射问题。disk存储也有同样的分类。
+
+41. 释放segment时，service thread可能正在用，如何解决这个并发问题？有个简单办法：先标记segment删除（或关掉引用入口），等所有当前service thread处理完成，再释放segment；新来的service thread必然不会用这个segment。
+
+--------------------------------------------------
+[2014-11-12]
+
+42. storage convergence, in different domains including:
+	1. performance oriented, middle business, slow archive. 3 kinds storage unified
+	2. single datacenter and global cluster unified
+	3. object storage, block storage, file system unified
+    Ceph has cache tiering and SSD compatibility for supporting them. swift has multi-region. 
+
+43. versioning is a good thing when defining interface/api. add version number in so that you can change to new interface in further with compatibility for older ones.
+
+---------------------------------------------------
+[2014-12-15]
+
+44. 分布式leader有两种方法
+	1. 各node指定序号，选序号小的，见ceph monitor
+	2. 各node有timer，timer回零时向它人推举自己为leader，见Raft Consensus: http://ramcloud.stanford.edu/raft.pdf。另外，CSMA/CD的指数回退也异曲同工。see animation on: https://raftconsensus.github.io/
+    选举都是当半数node同意后，通过。
+
+    lease很好用但是它依赖timing/timer，可能引起时钟问题
+
+----------------------------------------------------
+[2014-12-22]
+
+45. 资源预分配，这是个很常用的方法(pattern oriented software architecture: volume 3)。
+    解决掉并发分配资源问题，和
+
+    还有预计算。搜索用的反向索引，本质上是预计算。
+
+46. 将过程异步话。模仿Linux的tasklet，分同步的上半段和异步的下半段。
+    http://blog.csdn.net/rainight/article/details/6595070
+
+47. 元数据，小对象存储，dimensional reduction
+
+

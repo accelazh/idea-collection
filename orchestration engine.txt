@@ -1,0 +1,53 @@
+cloudify, heat, csm
+
+job tracking, inventory, resource tracking / inventory, 
+
+A->B->A problem? 一种做法：在A上装一个resource，能够再在A上装一个resource。
+
+strict version verification beforehand, os, kernel, ...
+
+efficient info to trace to root cause on exception raise
+
+external resource depending on
+
+relationship的显示声明，不像heat。显示声明才能做依赖管理。
+
+打patch过程的处理。这反而是一个imperative的东西，而不是declarative的。heat中没有，tosca中貌似也没有。虽然patch过程可以划归成另一次重新部署。
+
+verification过程，heat template、tosca中也没有涉及
+
+deploy service on existing box, share box
+
+----------
+
+1. human doesn't touch production machine. only one way in -> the template/puppet
+
+2. os, tools, middleware, application
+
+3. codify
+
+4. every vm/instance, should live in an "environment". compared to baremetal
+
+---------
+
+Openstack features summary
+
+	1. for network, the advanced but needed features are
+		vlan or alike separation & router, firewalls, load balancers, and virtual private networks (VPNs)
+
+	2. what about storage?
+
+---------
+
+1. 一个pool，可能需要另一个pool部署后的配置信息。这个pool可能是同一个service的不同version的另一个pool，也可能是另一个service的pool
+   一个pool部署后，还可以导出一些系统变量，比如server list。
+   考虑到，还可能由跨DC的pool部署依赖
+
+	一个service的deploy，需要自己的配置信息（依赖），需要自己的不同pool的配置信息（依赖），需要不同service的某个pool的配置信息（依赖），需要external resource的配置信息（依赖），需要一些环境变量（依赖）如server list。
+
+	resource为什么不能做成hierarchical关系？一个resource由多个子resource组成，最后映射到机器上。
+	service定义，release定义是分别需要的。deployment应该是和service完全分开的一个东西。service一旦deploy，信息就发布到字典服务中。另一个service在定义时可以进行引用。
+
+	一切东西都可以有version控制，甚至包括external data resource。
+
+

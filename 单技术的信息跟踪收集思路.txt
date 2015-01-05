@@ -1,0 +1,102 @@
+1. 搜索人们对这一技术的评价：是否值得使用这个技术，这个技术的特点是否与我需要的相符。它到底有什么优势？
+	2. 调查同类竞争的技术。
+	2.1. 这门技术的兼容性如何？平台支持率怎样？
+	2.2. 遗留系统能否与新技术兼容，数据能否方便地移植过来？过去的管理系统能否继续使用？
+	3. 调查使用这个技术的产品：开源的、非商业性的、商业性的、成功的。
+	4. 调查能够帮助你使用这个技术的框架。
+	4.1. 这门技术背后的支持者？背景足够强大吗？社区足够强大吗？发展前景如何？
+	4.2. 这个产品，它是由谁开发的。
+	     比如leveldb的开发者是Jeff Dean和Sanjay Ghemawat（http://www.cnblogs.com/haippy/archive/2011/12/04/2276064.html）。两个人是google的bigtable和mapreduce的主要设计实现者。一看这个，leveldb就值得研究了。
+	4.3. 生态环境发达程度：周边tool是否丰富，与其它popular系统的集成与互通，论坛答疑是否丰富，文档齐全。
+
+	4.4. 最好，找到一个开放代码的，足够复杂的用这个技术实现的程序，它将是我们学习和解决问题的重要参考。
+	4.5. 找一个或者做一个简单的demo例子，初步试手。
+	4.6. 如果能找到熟悉这个技术的人、用这个技术开发过产品的人，那最好了。寻找同行经验。
+
+	5. 学习，首先是从功能目录级别入手，然后选择需要的feature深入学习。
+	7. 需要搭建一个必须是非常方便的try&play环境，让你能够随时写点代码运行下试试。新技术的很多代码你需要试试看才能知道行不行，即使进入开发阶段也是一样。
+
+	8. 新技术，必然会为你带来一些Bug，做好被它们坑的准备。为它们预算时间。
+	9. 新技术，必然有一些功能没有，或者功能模式与你的需求不符，做好被它们坑的准备。为它们预算时间。
+
+	10. 在项目开发后，应该积累出一个对这个框架的增强版、可复用增强wrapper、缺陷列表、Warn List之类。
+
+-------------------------------------------------
+
+1. 调查有哪些在这方面出色的公司，看看
+	这些公司发布的开源项目
+	这些公司的相关新闻
+	这些公司的博客，博客可能有多种，找技术博客
+
+2. SlideShare很强大的，往往一个技术/产品/项目一有什么动作，SlideShare上一搜就会出现PPT。现在活动都用PPT哈……
+
+3. 对于开源项目，订阅这个项目的blog，订阅主要开发者/支持者/技术leader的blog，订阅热心于/主要支持这个项目的公司的blog。一些公司的blog往往非常优质。
+
+4. 对于开源项目，看这个项目的协作平台
+	maillist
+	blueprint
+	launchpad
+	等等
+5. Youtube中搜索改项目/技术，在国外，较新的和相当一部分的信息/资料会通过视频发送，比如speech之类。
+
+6. 搜索一下这个技术/项目的相关论文。论文有两种，一种是项目自己的publication，比如ceph，非常有用。一种是别人给些的。有的论文是对某种技术的讨论，有的论文讲的是项目的design and implementation。后者对于了解项目非常有用，比如bigtable。
+
+7. 技术/项目会定期举行一些conference、summit之类的，找出来看看。conference一般是paper+slide。summit一般是video，有人演讲一个ppt，好心的会给出ppt下载。
+
+8. 时不时google搜搜该项目/技术的相关新闻。另一方面wikipedia上也许会列出改项目/技术的综述，不过较新的技术wikipedia都很弱。
+
+-----------------------------------------
+[Ian's added up]
+
+1. 一个技术、需求，比如auto-scaling，我们调查它们的时候：
+   
+   首先看看行业标准、行业领军企业的做法。那么我们就去看看AWS的，看看Netflix是怎么做的。从这些成熟的Industry标准中学习才是common sense。别光看开源软件的……。
+
+2. 网上看到的文章作者、回复帖子、演讲人等等，你都可以发邮件去联系，有不会的问题请教一下之类的，对方不回也不会有大问题。熟了之后认识了，总会有很多好处。邮件加网上认识联系，似乎是互联网时代的go soclal呀。
+   
+   同理，论坛、社交网站、github、mailist之类的都可以这样。从Ian可以得知，说这已经很普遍的了。从网上见到的情况这确实是已经发生很久的了……
+
+   Going Social, Going Social，Going Social … 这个正是我欠缺的，得向这个move on和adoption，这是升级吧。
+
+
+------------------------------------------
+
+1. 发现直接搜Google Group真心有效。在调查Cloud Foundry怎么支持autoscaling时，搜Google Group搜出一堆内容。外面直接google却很难搜到。
+
+   估计搜索mail list也用同样的作用吧。
+
+------------------------------------------
+[2014-9-1]
+
+1. openstack等开源项目而言，得到资料的主要渠道
+	0. github code dive and code doc（新到没发布的信息）
+	0.5. watch/participate in code submitting and bug fixing，例如openstack的launchpad
+	1. maillist (最新的信息)
+	2. summit峰会video（相当新的信息）
+	2. 官方博客
+	3. 主要参与的个人的博客，如neutron的core developer "Assaf Muller"
+	4. 主要参与的公司的博客，如mirantis，ustack
+	5. industry practice。一些机构，会公布他们实践该系统的经验，通常在博客或paper中发布，有些极有价值。
+	n. 较好的新闻网站如infoq
+
+-------------------------------------------
+[2014-10-15]
+
+1. 对于新技术/feature，可以查一下performance/benchmark。需要考虑增加这个feature对于总线、cpu、disk、network等的压力。openstack的例子有ceilometer和vm live migration。
+
+-------------------------------------------
+[2014-10-24]
+
+1. 在调查企业产品时，去要它们产品的training material
+
+-------------------------------------------
+[2014-10-28]
+
+1. 找文档：search for "manual, guide, doc, cheatsheet, tutorial, practice, walkthrough" of ...
+   找解析: search for "deep dive, dive into, understanding, dissecting, architecture" of ..., ... "in nutshell", "look into" ..., a (visual) guide for dummies, xxx concepts, xxx explained, anatomy of xxx, xxx model (rabbitmq model, amqp model, java memory model, ...), under the hood (with), xxx under the hood, explanation or xxx explained, how xxx work,  
+
+    concept, architecture and workflow
+
+
+
+

@@ -1,0 +1,28 @@
+1. 内容演化
+	low quality
+	massive, high quality
+	水平expension
+	垂直expension
+
+2. 元内容演化
+	搜索、推荐、目录、报评、排名、tag
+	元内容socialize，social推荐、聚合、社区
+
+3. monitoring
+	metric, log
+	rule, trigger, alarm, scaling up/out
+	data visualization, 
+	mining, predictive, proactive
+	real-time
+
+4. 模式的浮现
+	如设计模式、UI模式等被总结出来
+
+5. 领军人物的出现和他/她的推动作用
+
+6. 新技术/应用的出现->社会的广泛接纳->被认为是基础需求->全面强制使用
+
+7. 一种势的推广和利用/搭便车的势的出现，以及结合。实际存在的势往往是已观察到的势震荡并积分到极限之后的结果。
+
+8. 一种生物/存在/人群/模式，存在长期到一定程度，密度达到一定程度，会分泌出自己的亚文化，或者说搭建在自己之上的另一层东西。当这层东西在时间和密度上到达一定程度，会分泌出更上层。层级金字塔可以用来判断这种生物/存在/人群/模式演化到什么阶段，即——“成熟度模型”。
+

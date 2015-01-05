@@ -1,0 +1,106 @@
+-----------------------------------------------
+[2013-12-16]
+
+1. 在企业建立时就将Prevent Data Silo纳入基因。
+
+2. DevOps中，各种技术日趋复杂，每个人专精负责其中一块，互相在技术上和业务上基本不了解。
+   然而，DevOps的项目往往是包含众多技术的平台的建立，例如OpenStack整套平台。这需要多个团队的紧密合作，一个团队做出决策时需要对另一团队知识的了解。
+   目前跨团队的技术信息和业务信息的传递并不顺畅，主要方式是schedule meeting分享一下。
+   对于新企业，我希望在企业建立时将跨团队信息传递纳入基因。
+
+3. IT行业，员工是非常非常看重到你这工作能不能学到东西的。所以作为管理者，你雇人、组建团队的时候的时候，需要考虑在一开始，就建立一套学习机制，作为雇佣条件来吸引人。
+   
+   公司订制切实有效的分享制度，对员工非常有帮助。更进一步，给员工指派讲师任务，专攻某门技术，一直定期演讲这方面，对培养他更加有效。
+
+4. 沟通是最重要的，当然，谈话是对方并不容易说出真实想法。权力的差距本质上也会阻碍沟通。
+
+5. 总是document运维的opération，因为它们难记又总是被复用
+
+6. Test Driven Development和Scrum，night build和复用标准，可以在企业一开始建立时就纳入。而如果是从已经习惯的混乱开发模式中建立起这套秩序，则往往更难。
+
+7. 学cisco这样，建立innovation系统？不需申请专利，而是激发产品改善。不过这也许更应该去依赖用户反馈而不是员工反馈。流程改善也许可以依赖他们。
+
+8. 大Boss和底层的员工接触很少，怎样避免让他们觉得大Boss已经忘了我们呢？
+   1. 大Boss会阅读大量文章，其中好的，可以邮件分享下来。让底层员工看到大Boss还是没有忘了我们的。
+   2. 抽象起来就是：time-to-time, periodically, small & positive, interaction
+   3. 例子：Simon Tu邮件分享的这篇文章：
+      http://www.csdn.net/article/2014-05-04/2819584-the-understanding-of-paas
+   
+9. The 5 core ‘pillars’ of functionality for OP:
+   http://www.inktank.com/software/future-of-calamari/
+
+    Provisioning: 
+        to allow an admin to deploy the Ceph software on an operating system.  This function is currently provided by ceph-deploy.
+    Configuration: 
+        to enable policy and component settings to be applied to a cluster. In particular, allow the admin to define CRUSH maps.
+    Monitoring: 
+        to ensure that critical events that require user interaction are highlighted and provide the admin with an “at a glance” view of cluster metrics and status. This pillar involves providing clear visualizations of complex data sets.
+    Management: 
+        to enable ad-hoc changes to a running cluster, typically in response to monitoring information.
+    Analytics: 
+        to interpret information from the cluster to help suggest actions or even to apply them automatically.
+
+    A 6th pillar - Performance Testing i.e embedding the common tools they used to test cluster performance so that it could aggregate and store test results (also for possible sharing).
+
+-----------------------------------------------
+[2014-9-3]
+
+1. 新闻对于社会而言不可或缺。我可以假定，对于一个公司内部而言，新闻也是必须的。Intel和Cisco都有内部的新闻体系。新闻传播的途径，初始是人到人传播，后来有媒体、网络的传播。可以考察一个公司的新闻传播等级完善到了哪一阶段。
+   Cisco的Webex Social原本应该承担新闻网络传播路径的角色，不过推广效果貌似不理想。现在Cisco我周围的新闻主要停留在人对人传播的阶段。
+
+2. Cisco有让员工短期尝试其它工作岗位的渠道，由一方post需求，另一方像job市场一样搜索和apply。渠道名叫Review Stretch Assignments。也许这是一种解决单一工作使人视野逐渐狭窄失去活力的职业问题的一条思路。
+
+   Review Stretch Assignments: http://wwwin.cisco.com/learning/GlobalPrograms/CareerDevelopment/explore/
+   FAQ: http://iwe.cisco.com/web/view-post/post/-/posts?postId=244100028
+	
+-----------------------------------------------
+[2014-9-22]
+
+1. Four kinds of person are nominated (in "Nominate a Product Security Champion"):
+       1. FORGE - A person who builds a peer network or teams to promote and track progress in building secure development processes, tests, or tools into Cisco products, services, or solutions; influences others to raise the bar on product security.
+       2. TEACH - A person who actively advances and develops his/her security knowledge through security education, certification or training AND utilizes this knowledge to mentor others, teach security courses, or deliver security related presentations.
+       3. IMPLEMENT - A person who drives execution of CSDL processes or new security technologies into Cisco products. This person also has the ability to define product security features or test requirements and contribute in defining security product roadmaps and requirements.
+       4. RESEARCH - A person who is involved in security research efforts focused on addressing or developing new security guidelines and policies or contributes innovative new features to security product architecture and requirements.
+
+-------------------------------------------------
+[2014-10-13]
+
+1. 豌豆荚的研发管理和绩效考核可以参考，by丁吉昌：
+   http://www.zhihu.com/question/20190597
+   OKR类似思科的CPC
+
+-------------------------------------------------
+[2014-10-15]
+
+1. 发挥企业中100%的人的头脑而不仅仅是领导的头脑，会有很大作用。
+   许多team的homebrew的项目/idea，一部分是公司可以给予投资的，但总有一部分是公司的方向或资金不能投资的。但这些项目/idea也是有价值的，如何把这部分价值发挥出来？开源吗？
+
+-------------------------------------------------
+[2014-10-16]
+
+1. ansible tower是ansible的收费版，乍一看它就多了个UI。puppet enterprise也是同样地，多了个UI。ceph enterprise提供了calamari，也是个UI。
+   做一个好的命令行Infra产品开源，然后买企业版赚钱，是一个常见的商业模式。企业版一般是管理工具、UI、售后支持。
+   那么到底是什么feature，使得企业版UI能够卖钱呢？
+        1. ansible tower feature list: http://www.ansible.com/tower
+        2. feature list  
+            Role-based access control
+              can also be integrate with LDAP or AD
+            Ansible job scheduling
+              run at specific time or repeat
+            Pull from source control
+              sync playbook from git/svn
+            Push-button job runs
+              launch job from UI
+            Audit trail
+              show history of who did what
+            Fully-documented rest api
+            Real time job output
+            Credential security
+            Tower cli tool
+            Tower dashboard
+              see a summary view of entire ansible environment
+            Visual inventory management
+              View host inventory and sync with AWS/GAE/..
+            Integrated tower monitoring
+               helps make sure tower system remains healthy
+

@@ -1,0 +1,12 @@
+想法来源：
+	youtube默认视频无法loop播放， 循环听歌不能。
+	于是有很多网站给youtube作loop功能，比如
+		http://www.youtube.com/watch?v=fKxmSe5s9_s
+	只要加上repeater，就可以进到loop视频的播放网站
+		http://www.youtuberepeater.com/watch?v=fKxmSe5s9_s
+	网站和URL几乎完全一样，就好像给youtube加了一个Decorator一样。
+	（正巧今天学了一天Python的Decorator）
+
+引申：
+	我可以用这种decorator网站的方式，为国内的各个网站增加功能。比如，youku没有弹幕聊天，那么能不能用decorator网站的方式给它加上弹幕聊天功能呢？
+	同理，可以为许多不同的网站做decorator，decorator的功能也可以各不相同，还可以开放出来成为App，供开发者作自己的decorator。

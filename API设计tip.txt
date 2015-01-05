@@ -1,0 +1,9 @@
+API设计指南
+
+1. verify、check、read、get等类型的方法必须是幂等的。
+2. am I modified? get changes
+3. 幂等性、幂等性、幂等性
+4. 性能指标、可靠性指标，异步、同步，时间延迟
+5. event handler。对ui空间，在每一个event都应有beforeXXX、afterXXX允许用户接入，并且允许prevent动作，如tab切换
+
+

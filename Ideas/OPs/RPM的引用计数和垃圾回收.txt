@@ -1,0 +1,1 @@
+RPM及其它OP artifact，的引用计数管理，懒惰垃圾回收。这样，就不会发生我们还在用着那个要装rpm的puppet，CMC/RMC那边就把rpm删掉了，因为开发快速迭代导致rpm版本迅速变旧。

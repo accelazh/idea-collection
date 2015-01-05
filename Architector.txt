@@ -1,0 +1,125 @@
+-------------------------------------------------------------
+[update 2014-9-9]
+
+1. from mipou + mine:
+
+     真正的上线服务，要考虑的生命周期管理的问题：
+     -- 上线就不能停 --
+     配置文件级修补，代码级修补，升级，如何处理？
+     load balancing如何扩展？
+     内容级别的判活检测
+     部署，备份，升级，回滚
+     更细致的还有日志文件的配置（日志文件放哪，内容什么格式，保留多少）
+     系统内存调优？（jvm内存使用，垃圾回收参数配置）
+     最好给程序开点后面
+     紧急情况用最快的办法看服务的状态
+     紧急情况预案
+     
+     事先了解运维团队的监控需求
+     密钥和密码管理
+     如何进行跨可用区、数据中心容灾？
+     灾难发生后的恢复过程，比如主备两个数据库状态已经不同步
+
+     对服务器作配置变更
+     移出机器、加入机器、更换机器的方案。实际情况，部署是少数，升级、扩容占多数
+
+2. Software Quality ISO Standards: http://www.arisa.se/compendium/node6.html
+
+     Functionality
+          Suitability
+               Highly Related Metrics
+               Related Metrics
+          Accuracy
+               Highly Related Metrics
+               Related Metrics
+          Interoperability
+               Highly Related Metrics
+               Related Metrics
+          Security
+               Highly Related Metrics
+               Related Metrics
+          Compliance
+
+     Reliability
+          Maturity
+               Highly Related Metrics
+               Related Metrics
+          Fault-tolerance
+               Highly Related Metrics
+               Related Metrics
+          Recoverability
+               Highly Related Metrics
+               Related Metrics
+          Compliance
+
+     Usability
+          Understandability
+          Learnability
+          Operability
+          Attractiveness
+          Compliance
+
+     Re-Usability
+          Understandability for Reuse
+               Highly Related Metrics
+               Related Metrics
+          Learnability for Reuse
+               Highly Related Metrics
+               Related Metrics
+          Operability for Reuse - Programmability
+               Highly Related Metrics
+               Related Metrics
+          Attractiveness for Reuse
+               Highly Related Metrics
+               Related Metrics
+          Compliance for Reuse
+
+     Efficiency
+          Time behavior
+               Highly Related Metrics
+               Related Metrics
+          Resource utilization
+               Highly Related Metrics
+               Related Metrics
+          Compliance
+
+     Maintainability
+          Analyzability
+               Highly Related Metrics
+               Related Metrics
+          Changeability
+               Highly Related Metrics
+               Related Metrics
+          Stability
+               Highly Related Metrics
+               Related Metrics
+          Testability
+               Highly Related Metrics
+               Related Metrics
+          Compliance
+
+     Portability
+          Adaptability
+               Highly Related Metrics
+               Related Metrics
+          Installability
+               Highly Related Metrics
+               Related Metrics
+          Co-existence
+               Highly Related Metrics
+               Related Metrics
+          Replaceablity
+               Highly Related Metrics
+               Related Metrics
+          Compliance
+
+--------------------------------------------------
+[2014-12-31]
+
+1. data plane和mgmt plane。data plane往往是性能关注的，mgmt plane往往不需要。
+   软件设计在这里有分野
+
+
+
+
+

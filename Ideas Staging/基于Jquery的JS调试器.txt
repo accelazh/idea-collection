@@ -1,0 +1,7 @@
+因为有jquery，js调试时经常抛出的是jquery代码，找不到root cause。碰到each()、map()时，也没法直接step into。
+
+专用于jquery的调试器。
+
+step into on each(), map() ...
+trace event comes from where
+break on event handler rather than jquery code

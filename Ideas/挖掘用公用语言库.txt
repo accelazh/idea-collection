@@ -1,0 +1,5 @@
+automatic summarization（http://en.wikipedia.org/wiki/Automatic_summarization）估计要用到一个summarization的训练库。我们是不是可以构建一个公用的训练库，放到github上开放？
+
+数据来源可以是wiki百科。可以是这个Good source for machine learning datasets in computer vision - Stack Overflow。可以是google的年代词汇使用量统计https://books.google.com/ngrams。
+
+同理，很多语言相关的数据挖掘都需要一套套训练库，我们都可以做出公用的，放到github上。

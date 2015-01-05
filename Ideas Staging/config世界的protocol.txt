@@ -1,0 +1,7 @@
+    我们有tosca，我们有relationship，我们有config publishing and require，我们有external resource。这在试图让以往中控式的config信息，变成SOA式的，变成面向对象式。但我们还应注意，config信息仍然是key-value pair式的，有的时候有冗余，而且是flat结构的。
+    企业应用，像openstack，或者webex，配置文件极其复杂。即使tosca、orchestration、云都发展成熟，config中的value仍然需要人来填写，并且填写正确，应用才能运行。最终，运维的难点仍然会沉降到config的key-value对的填写上。
+    纵观tosca，external resource、relationship什么的，本质上是在为flat的config信息，赋予意义。对于relationship，实际上我们是在把config分块，追溯其来源。现在我们要往前更迈一步，想想如何为config信息赋予意义、赋予结构，仅有flat结构是不够的。
+
+    对象式思路、职责成分、抽象许多软件共有的通用的配置成分、relationship和来源、......
+
+    然后，我们需要建造的是一个config世界的protocol，定义规范，并且让各种软件的config能够互通。cisco最适合protocol了。

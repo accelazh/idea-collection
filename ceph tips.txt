@@ -1,0 +1,309 @@
+1. EBOFS貌似没有再被提过……
+
+
+
+---------------------------
+
+1. 为什么Ceph的对象存储客户端，不适用object stripping呢？stripping可以并行读写提高效率的呀。
+   如果没有什么有意义的理由，则可以再给ceph实现一个带stripping的对象存储客户端。
+
+2. stripping是个好办法
+
+3. extending ceph中讲的可以给ceph动态加载的自己写的class，是不是每一台服务器都需要放一份？如果是，那么就需要一套分发管理的工具，还要处理升级等问题。
+
+4. 现在的发展状况是，CPU的速度极快，远超存储读写的速度。那么是不是可以推测，以calculation为基础的算法要比以存储+lookup的算法要更好了呢？
+
+5. 基于ceph的计算或者数据库框架，会有用吗？
+	map-reduce, hbase，hive，cloudera impala之类的？
+	数据挖掘呢？
+	另一方面，用来做NoSQL数据库效果如何？
+
+6. 考虑在拥有稠密关系的数据情境下，非关系型存储、水平无限扩展会发生什么，如何适应？
+	1. 参考为什么说互联网金融是对传统软件的一种颠覆：http://www.jdon.com/45845
+
+7. 也许可以给Ceph的Client写一个record级缓存。record级缓存往往比存储系统（比如关系数据库）的底层缓存有更高的命中率和更高比率的有效数据。
+
+8. 也许可以给Ceph的OSD写一个专用的本地文件系统。Ceph的写前日志已经不需要ext3等文件系统提供的日志功能了。本地对象查询也许也需要定制化的文件系统。
+
+9. 给ceph写一套测试用例，覆盖性能、HA、长时间稳定等企业production级别需要的测试
+
+10. InfiniBand能拿来干什么吗？
+
+11. new CRUSH bucket algorithms for special purposes. 既然crush算法可以自主定制，那么应该可以自己提供更好的算法插入进去。在有特定需求时，这样也会更加需要。
+
+    crush算法估计实际业务是必须自己定义的，只有业务才知道怎样分发能够比较均匀，避免写和读的热点。
+
+12. CRUSH算法步骤太多，相比一个hash要慢很多。怎么加速它？减少层数？
+
+13. 从File Aceess Prediction with Adjustable Accuracy的论文看，对于现在的数据存储系统，数据挖掘/预测一类的技术还没有进入这个领域。也许结合他们是未来的趋势？也许可以在这上面做一些文章？
+    P.S. 该论文的前言部分，提到了许多predictive caching之类的东西。
+
+14. Mirantis给了一个Openstack的Benchmark as a service的产品Rally，提出这样的问题：how to ensure that openstack works at scale? how to detect performance issues quickly and improve openstack scalability?
+    ceph其实也有同样的问题，说不定我可以借用这套工具，或者这套工具的思路。许多系统都会需要一个scalability、performance、stability方面的benchmark。
+
+15. 公共测试平台Rally也许能够用到ceph上。另一方面，也许可以用大量分散用户的个人电脑模拟分布式的大量用户访问请求，模拟测试workload。见Idea/公共测试平台。
+
+16. ceph貌似在btrfs文件系统上很快
+
+17. 关于ceph的性能优化：Ceph performance and benchmarking: http://slid.es/sebastienhan/ceph-performance-and-benchmarking
+
+18. 将Ceph与上层的Storm实时处理系统整合试试。
+    将此思想推广，存储系统之上的SQL系统如Hive和Impala、HBase、MapReduce、Storm、GraphLab这类系统，还有数据挖掘算法，都可以拿来整合试试。
+
+19. ceph中也许可以用上log structured storage思路，或者cache oblivious B-Tree的思路？
+    Log Structured Storage，按照写log的方式写数据，append and don't delete。实际上这和“记录事件而不是记录数据值”的思想相似。另一方面，这种做法取代了数据库常用的WAL日志，成了数据即日志。也许这种数据存储可以打破CAP的限制，造出更加高效的存储系统。也可以看看ceph中有没有用得上的地方。
+
+20. http://www.ustack.com/blog/openstack-cephopenstack-summit-2013/
+        -- "主要期望推动Ceph的backend能自由地替换成硬件支持如Fushion IO API等等来大大加强Ceph的性能"
+           Fushion IO API有可能用到ceph上，提高性能吗？
+
+21. http://www.ustack.com/blog/openstack-cephopenstack-summit-2013/
+        -- Ceph OSD的持久化引擎继承自ObjectStore，过去只有FileStore实现，现在LevelDB刚实现好（2013-11-15）。ObjectStore是可替换的，也许可以通过换用和定制ObjectStore提高性能。
+
+22. Ceph通过对scale up的强力支持，提供throughput。但latency实际是上升的，因为每个请求通过的处理层数更多了。有没有办法降低latency？
+
+23. 未来Ceph可以试试用ZFS当底层文件系统。一般来说BTRFS和XFS都是常用的选择。BTRFS已声明自己还不够成熟以作production之用。
+    另外，也许会有专用的local object store在为了被开发出来给Ceph用。
+    不过目前说BTRFS还不够成熟来给production用。
+
+24. ceph现在miss掉的两个点：
+    1. 为flash存储、SSD专门设计的存储方法，类比rocksdb。
+    2. 数据压缩，参考sanppy库（https://code.google.com/p/snappy/）。
+    3. 数据排重。云端如果有重复的文件/对象，能够只存储一份。降低对象存储的成本有两个主要方法：消重和Erasure Code。
+
+25. 参考：走进“开心农场主”：游戏数据分析的架构及调优：http://www.csdn.net/article/2013-11-21/2817586的“合并与物理计划执行方式的改进”一节。
+    多个请求，往往之间有重复工作的部分，可以将它们合并batch。SQL的例子最明显：好多SQL查询，可能都是对同一张表的扫描。那么可以把它们合并成一次扫描。
+    ceph目前对于batch似乎还没有什么设计。
+
+26. may be data aware 会很有帮助：
+	例如：很多数据是json、xml --- nested data structure。这些数据结构现在非常常用。
+        ceph如果能够对它们感知，也许能够进行特定的优化。
+
+    推而广之，存储系统可以为不同类型的data模式提供特定的优化。多提供几种优化方案，让用户选择最合适它们的data模式的配置。这也许可以成为一种存储系统的优化方法。
+
+    进一步推而广之，存储系统现在都是通用系统，通用总是不及专用能够更高效，那么往专有场景作特定优化，也许是一个可以产生许多新Idea的方向。可以提供多种加成优化方案供选择，因而不失通用性。
+
+27. ceph，当某些pg的数据变成热点hotspot时，是否能够有效地反应，比如分散数据或更多的replica。将好像meta store中用的dynamic partitioning tree一样。
+ref: http://blog.csdn.net/heiyeshuwu/article/details/9722443 海量存储系列之十二
+
+28. ceph中存入对象可能时重复的对象，或者对象中有部分重复，能够去重。例如网盘，这个就很有用。
+
+29. ceph创建的远程挂载的volume。其实local volume往往也挺好用，比如更快。有一种办法可以折衷：用local volume，数据存在这上；定期backup到ceph的远程volume或存储上。
+
+30. SSD实际上内部用的是RAM，因为擦除的问题，有一套写在SSD控制器硬件里算法去调度。但是这套算法是通用的，如果ceph用SSD来写日志，对于日志这个特殊的用途，也许可以不同上述通用的算法，而用专用的给日志的算法更快。
+
+31. MapReduce, or data mining on Ceph?
+
+32. Aggresive local caching for ceph
+	"If you want performance you could add OpenAFS on top of it for aggressive local caching."
+               ----- said by Mattias Eliasson at http://hekafs.org/index.php/2013/01/ceph-notes/
+
+	may be I can consider adding memory caching to ceph, making it fast. Taobao and those web applications use a lot of mem caching.
+
+33. 用数据挖掘方法，比如神经网络，给ceph做对象去重？
+
+34. 将服务器领域水平扩展（加机器就可scale out）的思路引入网络（也许结合SDN）
+	既然SDN已经出现了，未来网络有可能像计算机的发展一样，可以通过加机器（switch、route）进行横向扩展，有集中式控制和p2p式控制的不同方法路径。虽然现在的网络的性能有瓶颈上线，但未来也许通过加机器的水平扩展，就可以解决这个问题，和ceph一样了。
+
+	ceph，另一方面，网络是它的一大瓶颈，尤其是replica需求。那么有没有可能PC服务器的水平扩展思路引入到网络设备中，去提高ceph网络的性能呢？未来也许水平扩展会成为网络的普通功能（像现在的PC服务器发展趋势一样），现在也许需要通过特殊的网络部署去做到这点。
+
+35. GPU并行计算有没有可乘之机？
+
+36. 做一个AOP的，能够打印出一次对象读写，引发了几次IO操作，都是哪几次，用了多少时间，相关调用栈的辅助程序。帮助大家认识ceph的IO过程。
+
+37. 节能始终是云的一大话题，电耗占云的60%成本。ceph有没有像server consolidation，server低负载时休眠，live migration之类的节能方法？如何降低ceph云的功耗？
+
+38. 对上传的文件自动病毒扫描 auto virus scanning
+
+38.5 对上传的文件自动进行某种统计，比如类型统计之类的
+
+39. The most power-efficient way for a system to operate is to do work as quickly as possible, go into the deepest sleep state possible, and sleep as long as possible. To implement this, Red Hat Enterprise Linux 6 uses a tickless kernel. With this, the interrupt timer has been removed from the idle loop, transforming Red Hat Enterprise Linux 6 into a completely interrupt-driven environment.
+
+	https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html-single/Performance_Tuning_Guide/index.html
+
+39. Journal实际上是为了可靠性，让性能大幅降低的。但是通常数据不会出错，即Journal消耗了大量性能而没有产生作用。有没有代替它的方法，改进它的方法，或对可靠性与性能折扣进行折衷的办法？
+
+-----------------------------------------
+[2014-3-27]
+
+40. 听了Liping讲的富士康交换机核心框架：
+	将处理流程分成多条可以并行的处理流，处理流pin到cpu的不同核上。
+	因cpu分离，处理流之间lock free并行。cache切换也可避免。
+	另一个被避免的是内核上下文切换。
+	所有处理流之前有一个dispatcher，把input分派到各个处理流上。dispatcher也pin到一个核上工作。
+	这是一个框架，由三个核心人完成。其它feature都是可扩展上去的，就可以外包开发了。
+    首先，我认为ceph中也会有类似的，可以使用相似方式优化的地方。
+    cpu pin、单核去锁、流程并行这些思路很不错。另一个是优化似乎要深化到硬件上才给力。
+    总之，从这些方向思考ceph的改进。
+
+41. 给ceph做个message协议解析器？tcp dump是否可以干这个事？
+
+42. 在ceph中，尤其是messenger中应用非阻塞IO？
+
+------------------------------------------
+[2014-3-31]
+
+43. 仿照CPOL#981410中交错传送文件提高速率的方法，ceph中也许能找到应用场景：
+	ref: https://wwwin-cpol.cisco.com/cpol/patent.cgi?task=PatDetails&patent_p=981410&tgl=1
+	1. ceph在做replica的时候
+	2. 多个client拷贝同样的文件时
+
+-------------------------------------------
+[2014-4-3]
+
+44. ceph的crush map中分配PG，类似nova-scheduler。我能否实现某种节能的，或者专门适合UCS的crush map分配方法？
+
+-------------------------------------------
+[2014-4-4]
+
+45. ceph代码中，给我的感觉，普遍用lock进行同步，非阻塞算法似乎没见着。那么我是否可以以这个方向来优化呢？
+
+-------------------------------------------
+[2014-4-7]
+
+46. 在github上发表一个heavily commented版本的ceph代码，方便广大阅读代码的人
+
+47. 把ceph的performance logger的内容显示出来
+	ceph的代码布满了performance logger，但官方文档里似乎没怎么提它拿来干什么用。
+	是否可以编个程序把performance logger的内容显示出来看？ 
+
+48. how to see leveldb store file (key->value pairs) for ceph monitor?
+    也许我可以做这样的一个工具？
+
+-------------------------------------------
+[2014-4-8]
+
+49. ceph一定需要journal吗？
+	1. journal拖慢的ceph写的速度
+	2. ceph的replica之间是强一致的了，那么还需要journal以快速request返回吗？
+
+------------------------------------------
+[2014-4-16]
+
+50. ceph在机子损坏的情况下，可以自动recovery。但是，也许还需要一个外部的系统，帮助自动PXE、装OS等，自动把server提供给ceph系统。这个外部的系统有没有可以挖掘的东西？
+
+51. crush是完全configurable的。可以考虑按照price、power的调度，可以建造按照数据重要性分配远近的调度，甚至分配好机器、差机器。failure domain也可以分配。
+
+------------------------------------------
+[2014-4-29]
+
+52. 读写对象，每次call ceph的API，如果只能操作一个对象，那么应用程序往往需要操作多个对象时，网络来去时间就会白白消耗多次。如果ceph能提供batch操作，或者transaction呢？
+
+53. 看看ceph企业版提供了哪些新功能，比如管理界面。这是我们可以考虑自己开发给加上的，或者作为周边。
+
+------------------------------------------
+[2014-5-10]
+
+54. ceph optimized for "large amount of small objects"
+	1. facebook haystack: http://www.importnew.com/3292.html
+
+55. ceph底层还是在用其它单机文件系统，不像TFS、Haystack这样这接往磁盘上写。后者，有可能具有更快的速度和更好的block layout。我们能否为ceph添加上直接写磁盘，跨过文件系统的feature？
+    即使用来leveldb，ceph在后台底层上也只是增加了更厚的层，而leveldb是通过更厚的层来把文件系统用得更好。层越厚，ceph的deplay就会越高，除了scalability外，甚至比不过直接写文件系统。
+    
+    我们有没有可能反其道而行之，把ceph的后台底层变薄？甚至跳过文件系统直接写裸盘？或者，设计某种ceph专用文件系统？
+
+    [edit] leveldb不需要分配大量文件，也许可以看作是跳过文件系统管理object的方法，反而应该性能更快。
+
+56. 负载均衡导致的block迁移，一般规划在深夜。ceph有这样的schedule机制吗，或者有这样的需要吗？
+    见：http://www.importnew.com/3292.html
+
+------------------------------------------
+[2014-5-20]
+
+57. 随着集群的扩大，replication占用的网络带宽是线性增长的，总有一天会超过交换机/网线等的容量。
+    http://www.slideshare.net/randybias/architectures-for-open-and-scalable-clouds/20#
+
+    如何处理这个问题，需要为网络设计某种sharding机制吗？ 
+
+------------------------------------------
+[2014-6-3]
+
+58. "When evaluating a storage system, especially for VM virtual 
+disks’ data, latency plays a critical role. VMs tend to perform 
+small (4 K to 16 K) I/Os where latency becomes apparent. Our 
+measurements showed that RADOS has a non-negligible latency 
+of about 2 ms, so you cannot expect latency comparable with 
+local disks."
+    https://www.usenix.org/system/files/login/articles/02_giannakos.pdf
+
+	1. how to migrate the latency problem
+
+--------------------------------------------
+[2014-6-19]
+
+59. transparent connector between ceph and traditional storage systems
+    	1. IBM/Dell为有自己的数据中心，但是没有完全想要搬到云上的公司，提供了实体服务器+AWS云无缝衔接的virtualization解决方案。无缝地把新老技术衔接在一起，帮助客户过渡。
+	2. 同样的思路，放到ceph上，我们可以为新老存储系统提供无缝的、数据安全可靠的的衔接方案，一个整合的存储。
+
+---------------------------------------------
+[2014-7-9]
+
+60. 仿照mysql的日志查看器，做一个ceph的日志/journal查看器
+
+---------------------------------------------
+[2014-8-19]
+
+61. 我们能不能提供一个对ceph稍稍放松durability，从而延迟log进硬盘的IO操作，大幅提供访问速度的alternative?
+    同理，对ceph的强consistency，也有类似的alternative?
+
+---------------------------------------------
+[2014-8-29]
+
+62. perceptual hash can be used on ceph?
+    http://www.phash.org/
+
+---------------------------------------------
+[2014-8-31]
+
+63. how about ceph provide stream data. such as for movies and videos
+
+---------------------------------------------
+[2014-9-8]
+
+64. Ceph对image、大量小文件的存储，效果如何？
+    还有，视频流存储的效果如何？后者有哪些存储系统可用？流的读取如何处理？
+
+65. 现在，如果要做数据分析的话（可能这会逐渐成为一个必须），存储框架和计算框架总是都要有一套。而data locality awareness，像Hadoop这样，对于速度是非常需要的。
+    Ceph目前应该是没有考虑这一点的。我觉得可以作为一个功能加入。
+
+----------------------------------------
+[2014-9-17]
+
+67. ceph的log可以先写到SSD上，SSD较小，然后overflow到disk上。
+
+----------------------------------------
+[2014-10-16]
+
+68. openstack是个云操作系统。企业需要的可能是管理存储，裁剪一下openstack就可以卖个他们。这个思路类似嵌入式开发，裁剪linux。
+
+69. openstack使用ceph作为中心的、共享存储。但是共享存储这种模式，存储成了中心，入口处难免成为瓶颈，中心又会带来单点故障。虽然共享存储是目前的流行趋势，其中难道不是隐藏着这些隐患吗？
+    相对的方法，是使用local storage，把VM的disk存储在compute上。openstack可以支持compute local storage模式，也可以把ceph的OSD装在compute上。前者没有disk的HA，后者测试证明性能较差。但是，这种把storage放在使用者的local处的思路，我认为是可取的。有没有可能开发出这个角度的新的存储，从而取代ceph？
+    另外，ceph巨复杂的内部结构，与”高性能软件其实是做更少的事“相悖。虽然scalability更好，但delay却更高。日常VM使用会有大量小size的操作，delay就会明显拖慢速度。ceph的方式是否也可以换了？
+
+---------------------------------------
+[2014-11-10]
+
+70, swift has 'proxy affinity'. I want to say here that 'affinity' is a common thinking in storage systems. Consider ceph this way.
+
+---------------------------------------
+[2014-11-15]
+
+71. 自己实现Openstack的一个Volume backend。模仿ceph。但改进是，disk存在compute local上且ha，写直接到磁盘block device或SSD kv上，不像ceph通过本地文件系统。
+
+---------------------------------------
+[2014-1-3]
+
+72. Ceph的消息通信使用线程模型，落伍于现在流行的异步事件模型。
+    http://www.wzxue.com/ceph-network/
+        
+        "实际上我们从中很容易发现这个线程模型是存在重大问题的，也就是随着一个实体(如 OSD)的增加会线性增加一个实体的线程数目。线程的增加会导致严重的 Context Switch 损耗，线程级的 Context Switch 大概在 us 级别，会影响延迟敏感性应用的性能并且对系统造成资源压力。"
+
+        另一方面，我也觉得ceph里使用了大量的队列，可能带来性能问题。队里+并发+锁很容易成为性能杀手。
+
+73. ceph在volume snapshot层次过多时，会产生性能问题
+    http://www.wzxue.com/ceph-librbd-clone/
+
+74. Cinder，即使backend使用了ceph，也需要由cinder volume转发请求，cinder volume是与host绑定的，如果某一个volume所在的cinder volume的主机挂掉，volume就不能用了
+
+75. ceph的scrub是为了保证数据存储中的正确性，但传输过程的端对端正确性如何保证呢？一般是加校验码。
+
