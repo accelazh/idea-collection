@@ -1,0 +1,10 @@
+1. lockdep用来检测锁循环
+2. encode机制，有专门的文件encoding.h，用到了ceph::buffe::list
+3. Ager, OSD.cc:677
+4. ThreadPool
+   ThreadPool::TPHandle
+   比如：handle->reset_tp_timeout();
+5. Mon中和OSD中分布各处的timeout机制
+6. bufferlist
+7. messenger
+8. 诸多timeout机制, 以及SafeTimer

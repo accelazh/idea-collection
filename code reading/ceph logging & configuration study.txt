@@ -1,0 +1,27 @@
+1. clog => type LogClient 
+	=> LogClient.h => do_log() => ldout(cct,0) //cct is CephContext 
+				   => log_to_syslog() => syslog()
+				   => log_queue.push_back(LogEntry) => LogClient::_get_mon_log_message() => ldout(cct,10)
+				
+	=> dout.h => dendl => #define _ASSERT_H _dout_cct => CephContext::_log->submit_entry(_dout_e)
+	=> src/log/log.cc::submit_entry(ceph::log::Entry) => it is a blocking queue, implemented with pthead_mutex and pthread_cond 
+							     it is also a thread. always trying to flush the queue.
+	=> Log::_flush() // write to m_fd, the log file 
+
+----------------------------------------------	
+
+2. cluster_logger => PerfCountersBuilder.create_perf_counters() => perf_counters.h
+3. logger => PerfCountersBuilder.create_perf_counters()
+
+	=> class PerfCounters {..;perf_counter_data_vec_t m_data;..} is just a vector of perf_counter_data_any_d 
+	=> perf_counter_data_any_d is (name, type, value)
+
+----------------------------------------------
+
+4. cct->_conf is md_config_t
+	config.h => this file contains ceph configurations
+		 => how md_config_t is loaded from conf files => common/ConfUtils
+		 => md_config_t just copied all options in config_opts.h as member variable.
+  
+
+5. cct is CephContext in ceph_context.h

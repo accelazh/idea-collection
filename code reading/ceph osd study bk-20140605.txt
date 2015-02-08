@@ -1,0 +1,1019 @@
+1. Context是毁掉函数
+	C_Context这个类是把一组Context聚合成一个回调函数
+
+2. coll_t实际上代表了一个目录，目录中是对象的集合
+	ref: http://www.cnblogs.com/D-Tec/archive/2013/03/01/2939254.html
+
+3. questions
+	1. whay does sync do?
+	2. why each store class implement themselves Transaction?
+	3. what is omap?
+
+4. MemStore
+	1. queue_transaction()发起操作
+	2. 操作由_do_transaction()完成
+	3. MemStore中定义了自己的Collector类型和Object类型。数据结构是MemStore中存一个coll_t->Collection的map，Collection中存ghobject_t->Object的map。
+	4. 父类ObjectStore中，只有coll_t，ghobject_t这样的东西，相当于id号，没有collection、object的实际数据结构，没有object_t出现。
+
+5. ghobject_t
+	1. 定义在hobject.h
+	2. ghobject_t -> hobject_t -> object_t -> string name 可能就是一个文件路径
+
+6. KeyValueStore
+	Component: StripObjectMap -> GenericObjectMap->KeyValueDB
+			   继承树：KeyValueDB
+				    ->LevelDBStore
+			   而MonitorDBStore内部使用了LevelDBStore
+			   StripObjectMap中的KeyValueDB，是从构造函数中传入的
+		
+	在KeyValueStore中，StripObjectMap被称作backend
+		GenericObjectMap似乎是围绕这header在搞
+		header有parent属性
+	
+	throttle机制，KeyValueStore.cc line:1018，有借鉴意义
+	
+	queue_transactions()->op_queue_reserve_throttle()
+	->queue_op()
+	->op被放到OpSequencer中，->OpSequencer被OpWQ包一起来->OpWQ._enqueue()把OpSequence放入线程池ThreadPool
+	->OpWQ._process()->KeyValueStore._do_op()->osr->peek_queue()取出op->_do_transactions(o->tls, o->op, &handle::TPHandle)
+	->创建BufferTransaction->调用_do_transaction()，传入的是transaction而不是tls
+	->终于能看见按op类型的switch case了
+
+	->看一下_write()操作
+	->BufferTransaction去lookup_cached_header->_generic_write()
+	->file_to_extents()进行了strip分割
+	-> ...
+
+7. OSDMap中，包含了crush
+
+8. questions
+	1. how replication worked?
+	2. how strong sync is achieved?
+	3. snap shot how?
+	4. osd gossip?
+	5. osd auto recovery?
+	6. what is the IO path?
+	7. recovery and backfill process.
+	8. snapshot process.
+	9. what is OSD's superblock?
+	10. what does OSDService do?
+	11. what does PG's upgrade mean? seen in OSD::load_pgs()
+	12. PG到底是怎么处理CephPeeringEvent的？
+	13. OSD怎么做到增量写、thin provision的？
+	14. split?
+	15. what does pg's parent mean?
+	16. what is the object's ondisk file/kv structure, including snap?
+	    ref: https://ceph.com/docs/master/dev/osd_internals/snaps/
+
+9. good points to learn
+	1. how OSD/PG heartbeat is monitored
+	2. how OSD health is monitored
+	3. there are many checks and asserts embedded
+	4. used a lot for waiting lists, such as OSD::waiting_for_osdmap, OSD::waiting_for_pg, OSD::pending_splits
+	5. OSD::7531 -> op->mark_reached_pg(); 这追踪到TrackedOp::mark_event()。它最终写了一条日志，方便追踪op的轨迹。
+	   我们可以借鉴它，不一定写日志，但追踪op的执行路径
+	6. Messenger throttle机制
+	   这是一个好的pattern。分布式存储系统中，如果recovery、scrubing、replication、rebalance等流量不加throttle，很可能significant performance regression
+	7. reservation机制。
+	   https://github.com/ceph/ceph/blob/master/doc/dev/osd_internals/backfill_reservation.rst
+	   backfill reservation：如果所有的backfill同时发生，那么就会把目标机淹死。reservation使得同时进行的backfill数量得到限制。
+
+10. 重复的pg
+	1. 一个pg从属于一个pool
+	2. 由pg_id、pg_t区分的一个pg，实际上是指有3份拷贝的一组pg
+	   而3份拷贝中的每一份单独的pg，由spg_t类型表示
+
+11. 可以研究的东西
+	1. SafeTimer
+
+12. material
+	1. placement group states:
+		http://ceph.com/docs/master/rados/operations/pg-states/
+
+--------------------------------------------------------
+[2014-4-26]
+
+========================
+= OSD Flow Tracing     =
+========================
+
+1. OSD msg dispatching
+
+OSD::ms_dispatch()
+	do_waiters()	// while !finished.empty(), do dispatch_op(next)
+	_dispatch(m)
+		// -- don't need lock --
+		case CEPH_MSG_PING:
+			break;
+	
+		// -- don't need OSDMap --
+		case CEPH_MSG_OSD_MAP:
+			handle_osd_map(static_cast<MOSDMap*>(m))
+				to 2.1
+		case CEPH_MSG_SHUTDOWN:
+			shutdown();
+		case MSG_PGSTATSACK:
+			handle_pg_stats_ack(MPGStatsAck *ack)
+				to 3.1
+		case MSG_MON_COMMAND:
+    		handle_command(static_cast<MMonCommand*>(m));
+    			to 4
+	  	case MSG_COMMAND:
+    		handle_command(static_cast<MCommand*>(m));
+    			to 4
+    	case MSG_OSD_SCRUB:
+			handle_scrub(static_cast<MOSDScrub*>(m));
+			   	to 5.1
+  		case MSG_OSD_REP_SCRUB:
+    		handle_rep_scrub(static_cast<MOSDRepScrub*>(m));
+    			to 5.4
+
+		// -- need OSDMap --
+		default:
+			dispatch_op(op);
+
+2. OSD OSDMap updating process
+
+	2.1. when receive osd map message
+
+		handle_osd_map(static_cast<MOSDMap*>(m))
+			if (first > osdmap->get_epoch() + 1)	// missing some epoch of OSDMap
+				osdmap_subscribe(..)				
+
+			// store new maps: queue for disk and put in the osdmap cache
+			for (epoch_t e = start; e <= last; e++)
+				t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
+
+			// update superblock
+			superblock.oldest_map = first;
+			superblock.newest_map = last;
+
+			// advance through the new maps
+			for (epoch_t cur = start; cur <= superblock.newest_map; cur++)
+				// start blacklisting messages sent to peers that go down.
+			service.pre_publish_map(newmap);
+
+			// kill connections to newly down osds
+			...
+
+			osdmap = newmap;
+
+			advance_map(t, fin);	// since crushmap is different now, I need update my pg
+				ceph::unordered_map<spg_t, create_pg_info>::iterator n = creating_pgs.begin();
+				while (n != creating_pgs.end())
+					// am i still primary?
+					if (primary != whoami)
+						creating_pgs.erase(p);
+
+				// scan for waiting_for_pg
+				map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
+					while (p != waiting_for_pg.end())
+						int role = osdmap->calc_pg_role(whoami, acting, nrep);		// my osd rank in the pg's acting osds
+						...
+
+			// the only place to change state = ACTIVE
+			if (is_booting())
+				state = ACTIVE
+
+			// check am I in osdmap? 
+			if state == ACTIVE
+				if (!osdmap->exists(whoami))
+					do_shutdown = true
+				else if (!osdmap->is_up(whoami) || addr wrong) 		// if something wrong
+					... stop, or start_waiting_for_healthy()
+
+			// superblock and commit
+			write_superblock(t);
+			store->queue_transaction(0, _t, new C_OnMapApply(&service, _t, pinned_maps, osdmap->get_epoch()), 0, fin);
+			service.publish_superblock(superblock);
+
+			// yay!
+			consume_map();
+				// scan pg's, to count num_pg_primary, num_pg_replica, num_pg_stray, and find which pg need to be removed
+				for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin(); it != pg_map.end()
+					...
+				// remove pg
+				for (..)
+					_remove_pg(&**i);
+				// scan pg's
+				for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin(); it != pg_map.end()
+					pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
+
+
+			if (!is_active()) {
+				peering_wq.drain();
+			} else {
+				activate_map();
+					wake_all_pg_waiters();
+					// norecover?
+					...
+					service.activate_map();
+			}
+
+			// end
+			if (m->newest_map && m->newest_map > last) {
+				osdmap_subscribe(osdmap->get_epoch()+1, true);
+			} else if (is_booting()) {
+				start_boot();  // retry
+			} else if (do_restart)
+				start_boot();
+
+			if (do_shutdown)
+				shutdown();
+
+	2.2. where osdmap is sent out 
+
+		handle_replica_op() or handle_op()
+			_share_map_incoming(..)
+				send_incremental_map(epoch, con)
+
+		handle_osd_ping() or do_notifies() or do_queries() or do_infos() or handle_pg_query()
+			_share_map_outgoing(..)
+				send_incremental_map(pe, con)				
+	
+3. send pg status to mon, and receive pg status ack on osd
+
+	3.1. when MSG_PGSTATSACK comes
+
+		handle_pg_stats_ack(MPGStatsAck *ack)
+				if (!require_mon_peer(ack))
+					return;		// the other end of msg must be mon
+				xlist<PG*>::iterator p = pg_stat_queue.begin();
+  				while (!p.end())
+  					pg->stat_queue_item.remove_myself();
+
+  	3.2. where MSG_PGSTATSACK sends out
+
+  		in OSD.cc
+  		flush_pg_stats() or do_mon_report() or ms_handle_connect()
+  		send_pg_stats(..)
+  			MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+  			xlist<PG*>::iterator p = pg_stat_queue.begin();
+  			while (!p.end())
+  				if (pg->pg_stats_publish_valid)
+  					m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+
+  			monc->send_mon_message(m);
+
+  		in PGMonitor.cc
+  		prepare_update(PaxosServiceMessage *m)
+  			case MSG_PGSTATS:
+  				return prepare_pg_stats((MPGStats*)m);
+  					MPGStatsAck *ack = new MPGStatsAck;
+  					...
+  					mon->send_reply(stats, ack);
+
+  			case MSG_MON_COMMAND:
+  				...
+
+4. handle command 
+
+	handle_command(static_cast<MMonCommand*>(m)) or handle_command(static_cast<MCommand*>(m));
+		command_wq.queue(c);
+
+	OSD::CommandWQ
+		void _process(Command *c)
+			osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
+				... 	// handle cli commands
+				MCommandReply *reply = new MCommandReply(r, rs);
+				client_messenger->send_message(reply, con);
+
+5.  scrubbing process
+
+	5.1. handle MSG_OSD_SCRUB
+		handle_scrub(MOSDScrub *m)
+			if (!require_mon_peer(m))		// must be sent from mon
+	    		return;
+	    	
+	    	if (m->scrub_pgs.empty())
+	    		for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin(); p != pg_map.end(); ++p)
+	    			if (pg->is_primary())
+	    				pg->unreg_next_scrub();
+	    				pg->scrubber.must_scrub = true;
+	    				pg->reg_next_scrub();
+	    					osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+	    						last_scrub_pg.insert(pair<utime_t,spg_t>(t, pgid));
+	    	else
+	    		for (vector<pg_t>::iterator p = m->scrub_pgs.begin(); p != m->scrub_pgs.end(); ++p)
+	    			if (osdmap->get_primary_shard(*p, &pcand) && pg_map.count(pcand)
+	    				PG *pg = pg_map[pcand];			// to get primary pg
+	    			if (pg->is_primary())
+	    				pg->unreg_next_scrub();
+	    				pg->scrubber.must_scrub = true;
+	    				pg->reg_next_scrub();
+
+	5.2. when will last_scrub_pg be cancelled
+
+		OSD::handle_scrub(MOSDScrub *m) or ReplicatedPG::on_shutdown()
+			PG::unreg_next_scrub()
+				osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);		// OSDService::unreg_last_pg_scrub(spg_t pgid, utime_t t)
+					last_scrub_pg.erase(it);
+
+	5.3. when will scrubbing happen
+
+		OSD::sched_scrub()
+			pg->sched_scrub()
+				queue_scrub();
+					state_set(PG_STATE_SCRUBBING);
+					osd->queue_for_scrub(this);
+						scrub_wq.queue(pg);
+
+		OSD::ScrubWQ
+			void _process(..)
+				pg->scrub(handle);
+					if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
+					    state_clear(PG_STATE_SCRUBBING);
+					    state_clear(PG_STATE_REPAIR);
+					    state_clear(PG_STATE_DEEP_SCRUB);
+					    publish_stats_to_osd();
+					    return;
+					}
+
+					// when we're starting a scrub, we need to determine which type of scrub to do
+					if (!scrubber.active)
+						scrubber.is_chunky = true;
+						if (!con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB))
+							scrubber.is_chunky = false;
+
+					// do scrubbing
+					if (scrubber.is_chunky) {
+						chunky_scrub(handle);
+					} else {
+						classic_scrub(handle);
+					}
+
+		/*
+			the next scrubbing process is handled by PG::Scrubber
+			the process is a bit complex
+		*/
+
+	5.4. handle MSG_OSD_REP_SCRUB
+		handle_rep_scrub(static_cast<MOSDRepScrub*>(m))		//rep means replica
+		 	rep_scrub_wq.queue(m);
+
+		 OSD::RepScrubWQ
+		 	void _process()
+		 		PG *pg = osd->_lookup_lock_pg(msg->pgid);
+		 		pg->replica_scrub(msg, handle);
+
+		/*
+		  Guessing:
+		  	MOSDRepScrub or MSG_OSD_REP_SCRUB comes in scrubing process, to request replica to do scrubing
+		*/
+
+	5.5. where MOSDScrub msg comes from
+
+		OSDMonitor::preprocess_command()		// handle cli commands
+			...
+			else if ((prefix == "osd scrub" || prefix == "osd deep-scrub" || prefix == "osd repair"))
+				mon->try_send_message(new MOSDScrub(osdmap.get_fsid(), pvec.back() == "repair", pvec.back() == "deep-scrub"), osdmap.get_inst(osd));
+
+		PGMonitor::preprocess_command(MMonCommand *m)		// handle cli commands
+			...
+			else if (prefix == "pg scrub" || prefix == "pg repair" || prefix == "pg deep-scrub") 
+	     		mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs, scrubop == "repair", scrubop == "deep-scrub"), mon->osdmon()->osdmap.get_inst(osd));
+
+	    /*
+	    	They come from user cli commands
+	    */
+
+6. OSD startup
+
+	6.1. OSD booting
+
+		[osd]
+		OSD::start_boot()
+			C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
+			monc->get_version("osdmap", &c->newest, &c->oldest, c);
+				...
+				C_OSD_GetVersion::finish()
+					osd->_maybe_boot(oldest, newest);
+						if (osdmap->test_flag(CEPH_OSDMAP_NOUP))
+							log ...
+						else if (is_waiting_for_healthy() || !_is_healthy())
+							if (!is_waiting_for_healthy())
+	      						start_waiting_for_healthy();
+	      					heartbeat_kick();
+	      				else if osdmap->get_epoch() >= oldest - 1 && osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest
+	      					_send_boot();
+	      						MOSDBoot *mboot = new MOSDBoot(superblock, boot_epoch, hb_back_addr, hb_front_addr, cluster_addr);
+	      						_collect_metadata(&mboot->metadata);
+	      						monc->send_mon_message(mboot);
+	      					return
+
+	      				// get all the latest maps
+	      				// subscribe后，将会得到Monitor发来的MOSDMap消息。MOSDMap消息Monitor和OSD都可以发。MOSDMap到handle_osd_map()中，又会触发start_boot()
+						if (osdmap->get_epoch() > oldest)
+							osdmap_subscribe(osdmap->get_epoch() + 1, true);
+						else
+							osdmap_subscribe(oldest - 1, true);
+		/*
+			start_boot()中，
+				如果OSDMap版本够新，则
+					monc->set_mon_message(MOSDBoot mboot)
+					Monitor给MOSDMap消息，包含最新OSDMap
+				如果不够，则
+					osdmap_subscribe(...)
+					Monitor发送OSD订阅的MOSDMap消息
+					handle_osd_map(MOSDMap m)
+						...
+						start_boot()
+					重新又绕回到start_boot()
+		*/
+
+		// after moc->send_mon_message(MOSDBoot mboot)
+		[mon]
+		PaxosService::dispatch()
+			OSDMonitor::preprocess_query()
+				preprocess_boot()
+					// already booted?
+					if (osdmap.is_up(from) && osdmap.get_inst(from) == m->get_orig_source_inst())
+						_booted(m, false)
+							send_latest(m, m->sb.current_epoch+1);
+								if (start == 0)
+									send_full(m);
+										mon->send_reply(MOSDMap *m)
+								else
+									send_incremental(m, start);
+										mon->send_reply(MOSDMap *m)
+						return true
+					// noup?
+					if (!can_mark_up(from))
+						send_latest(m, m->sb.current_epoch+1);
+						return true
+
+		// 最终从Monitor发回MOSDMap消息
+		[osd]
+		OSD::handle_osd_map(..)
+			...
+			state = STATE_ACTIVE
+			...
+
+	6.2. init processes
+
+		// 无资源分配
+		OSD::pre_init()
+			cct->_conf->add_observer(this);
+
+		OSD::init()
+			store->mount();
+			read_superblock();
+				store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+				::decode(superblock, p);
+			
+			// make sure info object exists
+			if (!store->exists(coll_t::META_COLL, service.infos_oid))
+				t.touch(coll_t::META_COLL, service.infos_oid);
+				r = store->apply_transaction(t);
+
+			// make sure snap mapper object exists
+			...
+
+			// lookup "current" osdmap
+			osdmap = get_map(superblock.current_epoch);
+				return service.get_map(e);
+					OSDMapRef ret(try_get_map(e));
+						OSDService::try_get_map(epoch_t epoch)
+							OSDMapRef retval = map_cache.lookup(epoch);
+							if (retval)
+								return retval
+							OSDMap *map = new OSDMap;
+							_get_map_bl(epoch, bl)
+								 store->read(coll_t::META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+							map->decode(bl);
+							return _add_map(map);
+								OSDMapRef l = map_cache.add(e, o);
+
+			// load up pgs (as they previously existed)
+  			load_pgs();
+  				set<spg_t> head_pgs;
+  				map<spg_t, interval_set<snapid_t> > pgs;
+  				for (vector<coll_t>::iterator it = ls.begin(); it != ls.end(); ++it)
+  					pgs[pgid].insert(snap);
+  					head_pgs.insert(pgid);
+
+  				bool has_upgraded = false;
+  				for (map<spg_t, interval_set<snapid_t> >::iterator i = pgs.begin(); i != pgs.end(); ++i)
+  					spg_t pgid(i->first);
+
+  					epoch_t map_epoch = PG::peek_map_epoch(store, coll_t(pgid), service.infos_oid, &bl);
+  					PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
+  						PG* pg = _make_pg(createmap, pgid);
+  							PGPool pool = _get_pool(pgid.pool(), createmap);
+  							pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
+  						pg->lock(no_lockdep_check);
+
+  					// read pg state, log
+    				pg->read_state(store, bl);
+
+    				if (pg->must_upgrade())
+    					has_upgraded = true;
+    					pg->upgrade(store, i->second);
+
+    				service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
+    				pg->reg_next_scrub();
+
+    				pg->get_osdmap()->pg_to_up_acting_osds(pgid.pgid, &up, &up_primary, &acting, &primary); 
+			        pg->init_primary_up_acting(up, acting, up_primary, primary);
+
+			        int role = OSDMap::calc_pg_role(whoami, pg->acting);
+    				pg->set_role(role);
+
+    				PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
+    				pg->handle_loaded(&rctx);
+
+    			build_past_intervals_parallel();
+
+    		// i'm ready!
+    		client_messenger->add_dispatcher_head(this);
+  			...
+
+  			service.init();		// OSDService::init()
+			service.publish_map(osdmap);
+			service.publish_superblock(superblock);
+
+			consume_map();
+
+			state = STATE_BOOTING;
+  			start_boot();
+  				to 6.1
+
+  		OSD::final_init()
+  			AdminSocket *admin_socket = cct->get_admin_socket();
+  			test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
+
+  			r = admin_socket->register_command(..)
+  			... // init admin sockets
+
+7. ObjectStore
+
+	7.1. How ObjectStore finally calls LevelDB
+
+		KeyValueStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
+			return _do_transactions(tls, op_seq, 0);
+				for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p, trans_num++)
+					r = _do_transaction(**p, bt, spos, handle);
+						...	// a lot of transaction op
+				r = bt.submit_transaction();	// KeyValueStore::BufferTransaction::submit_transaction()
+					r = store->backend->save_strip_header(header, spos, t);
+					return store->backend->submit_transaction(t);	// store->backend is StripObjectMap
+						return db->submit_transaction(t);	// GenericObjectMap::submit_transaction()
+							// KeyValueDB::submit_transaction(), actually LevelDB::submit_transaction()
+							leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat)); 
+
+8. MSG_OSD_PG_CREATE
+
+	8.1 where it comes?
+
+		/*
+			这个函数在PGMonitor中经常性地被调用，基本上paxos一有变动就被调用
+		*/
+		PGMonitor::send_pg_creates()
+			for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin()
+			PGMonitor::send_pg_creates(int osd, Connection *con)
+				...
+				/* m.mkpg携带要创建什么PG， 它来自于PGMonitor::pg_map.creating_pgs_by_osd.find(osd)*/
+				MOSDPGCreate *m = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
+				...
+	
+	8.2 Handling PG creation
+		OSD::handle_pg_create()
+			MOSDPGCreate *m = (MOSDPGCreate*)op->get_req();
+			for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin(); p != m->mkpg.end(); ++p)
+				pg_t on = p->first;
+				spg_t pgid;
+				bool mapped = osdmap->get_primary_shard(on, &pgid);
+				
+				// register.
+				creating_pgs[pgid].history = history;
+				creating_pgs[pgid].parent = parent;
+				creating_pgs[pgid].acting.swap(acting);
+				
+				PG *pg = NULL;
+				if (can_create_pg(pgid))
+					pg = _create_lock_pg(osdmap, pgid, true, false, false, 0, creating_pgs[pgid].acting, whoami, creating_pgs[pgid].acting, whoami,	history, pi, *rctx.transaction);
+						PG *pg = _open_lock_pg(createmap, pgid, true, hold_map_lock);
+							PG* pg = _make_pg(createmap, pgid);
+								pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
+						service.init_splits_between(pgid, pg->get_osdmap(), service.get_osdmap());	
+						pg->init(role, up, up_primary, acting, acting_primary, history, pi, backfill, &t);
+						return pg;
+					pg->handle_create(&rctx);
+					pg->publish_stats_to_osd();
+						// a lot of updating this.info
+						...
+						if (is_primary())
+							osd->pg_stat_queue_enqueue(this);
+				dispatch_context(rctx, pg, osdmap);
+					do_notifies(*ctx.notify_list, curmap);
+					do_queries(*ctx.query_map, curmap);
+					do_infos(*ctx.info_map, curmap);
+				
+			maybe_update_heartbeat_peers();			
+	
+	8.3 PG::upgrade(..)
+		PG::upgrade(..)
+			for (interval_set<snapid_t>::const_iterator i = snapcolls.begin(); i != snapcolls.end(); ++i)
+				for (snapid_t next_dir = i.get_start(); next_dir != i.get_start() + i.get_len(); ++next_dir)
+					coll_t cid(info.pgid, next_dir);
+					int r = get_pgbackend()->objects_list_partial(cur, store->get_ideal_list_min(), store->get_ideal_list_max(), 0, &objects, &cur);
+					for (vector<hobject_t>::iterator j = objects.begin(); j != objects.end(); ++j)
+						t.remove(cid, *j);
+			
+			while (1)
+				/* to repair snap? */
+				for (vector<hobject_t>::iterator j = objects.begin(); j != objects.end(); ++j)
+					...
+					snap_mapper.get_snaps(*j, &cur_snaps);
+					...
+					snap_mapper.add_oid(*j, oi_snaps, &_t);
+			
+9. MSG_OSD_PG_NOTIFY
+	9.1 handle_pg_notify
+		/** PGNotify
+		 * from non-primary to primary
+		 * includes pg_info_t.
+		 * NOTE: called with opqueue active.
+		 */
+		 OSD::handle_pg_notify(..)
+			handle_pg_peering_evt(..)
+			/*
+			 * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
+			 * hasn't changed since the given epoch and we are the primary.
+			 */
+					PG *pg = _create_lock_pg(..)
+	
+	9.2. where it comes from
+		
+			OSD::handle_pg_query(OpRequestRef op) || OSD::dispatch_context(..)
+				/** do_notifies
+				 * Send an MOSDPGNotify to a primary, with a list of PGs that I have
+				 * content for, and they are primary for.
+				 */
+				OSD::do_notifies(..)
+					 MOSDPGNotify *m = new MOSDPGNotify(..)
+					 
+10. MSG_OSD_PG_QUERY
+	10.1 handle_pg_query
+		/** PGQuery
+		 * from primary to replica | stray
+		 * NOTE: called with opqueue active.
+		 */
+		OSD::handle_pg_query(..)
+			pg->queue_query(..)
+				...
+				peering_queue.push_back(evt);
+				to next
+			...
+			MOSDPGLog *mlog = new MOSDPGLog();
+			_share_map_outgoing(from, con.get(), osdmap);
+			cluster_messenger->send_message(mlog, con.get());
+			...
+			do_notifies(notify_list, osdmap);
+		
+		[after pg->queue_query]
+			... // seems to be related to recovery process
+	
+	10.2 where PGQuery comes from
+		OSD::dispatch_context
+			OSD::do_queries(..)
+				...
+				
+11. MSG_OSD_PG_LOG
+	
+	11.1 handle
+		OSD::handle_pg_log(OpRequestRef op)
+			handle_pg_peering_evt(..);
+				...
+				pg->queue_peering_event(evt);
+				...
+				
+	11.2. where comes
+		OSD::handle_pg_query(OpRequestRef op)
+			...
+		PG::activate(..)
+			...
+		PG::share_pg_log()
+			...
+		PG::fulfill_log(..)
+			...
+	
+12. MSG_OSD_PG_INFO
+		OSD::handle_pg_info(OpRequestRef op)
+			handle_pg_peering_evt(..)
+		
+		/* where comes */
+		OSD::dispatch_context(..)
+			do_infos(..)
+		PG::share_pg_info(..)
+			...
+		PG::PG::_activate_committed(epoch_t e)
+			...
+
+13. MSG_OSD_PG_SCAN
+	
+	13.1 where it comes?
+		ReplicatedPG::do_scan(..)
+		ReplicatedPG::recover_backfill(..)
+
+	13.2. handle_pg_scan
+		OSD::handle_pg_scan(..)
+			pg = _lookup_pg(m->pgid);
+			enqueue_op(pg, op);
+				pg->queue_op(op);
+					osd->op_wq.queue(make_pair(PGRef(this), op));
+
+		[OSD::OpWQ]
+		OSD::OpWQ::_process(..)
+			osd->dequeue_op(pg, op, handle);
+				op->mark_reached_pg();
+				pg->do_request(op, handle);
+					ReplicatedPG::do_request(..)
+						case MSG_OSD_PG_SCAN:
+    						do_scan(op, handle);
+    							...
+    							MOSDPGScan *reply = new MOSDPGScan(..)
+    							...
+    							/*
+    								Seems heavily related to Backfill. From http://ceph.com/docs/master/rados/operations/pg-states/ see:
+    								Backfill
+										Ceph is scanning and synchronizing the entire contents of a placement group instead of inferring what contents need to be synchronized from the logs of recent operations. Backfill is a special case of recovery.
+    							*/
+
+14. what is CephPeeringEvt?
+	14.1. PG.h::class CephPeeringEvt{
+			epoch_sent, epoch_requested, 
+			evt,
+		}
+	     no subclasses
+
+	14.2. PG::queue_peering_event(CephPeeringEvtRef evt)
+			peering_queue.push_back(evt);
+			OSDService::queue_for_peering(PG *pg=this)
+				peering_wq.queue(pg);
+
+		  OSD::peering_wq::_process(..)
+		  	osd->process_peering_events(pgs, handle);
+		  		for (list<PG*>::const_iterator i = pgs.begin(); i != pgs.end(); ++i) {
+		  			advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
+
+		  			PG::CephPeeringEvtRef evt = pg->peering_queue.front();
+		  			pg->handle_peering_event(evt, &rctx);
+		  				recovery_state.handle_event(evt, rctx);
+
+		  			pg->write_if_dirty(*rctx.transaction);
+		  		}
+
+15. CephPeeringEvent and Recovery
+    Ceph peering model: http://lists.ceph.com/pipermail/ceph-users-ceph.com/attachments/20130415/39f25f5a/attachment-0001.png
+
+	// general pg op process
+	enqueue
+	_process
+	dequeue
+	op->mark_reached_pg();
+	pg->do_request(op, handle);
+
+	// pg scan
+	PGBackend::objects_list_partial(..)
+			ObjectStore::collection_list_partial()
+				KeyValueStore
+					StripObjectMap
+						GenericObjectMap::list_objects(..)
+							KeyValueDB::get_iterator()
+
+	// ----------------
+
+	// queue_peering_event(CephPeeringEvent..)
+
+	PG::queue_peering_event(CephPeeringEvtRef evt)
+		peering_queue.push_back(evt);
+		osd->queue_for_peering(this);
+
+	OSD::peering_wq::_process()
+		osd->process_peering_events(pgs, handle);
+			advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
+				pg->handle_advance_map(nextmap, lastmap, newup, up_primary, newacting, acting_primary, rctx);
+					recovery_state.handle_event(evt, rctx);
+				if (parent.is_split(..))
+					.. // handle splits
+			
+			PG::CephPeeringEvtRef evt = pg->peering_queue.front();
+			pg->peering_queue.pop_front();
+			pg->handle_peering_event(evt, &rctx);
+				recovery_state.handle_event(evt, rctx);
+			
+			pg->write_if_dirty(*rctx.transaction);
+			
+	// PG recover states
+
+	Initial 
+		Load -> Reset
+		MNotifyRec -> Primary
+		MInfoRec -> Stray
+		MLogRec -> Stray
+		
+	Started
+		AdvMap -> (up or acting affected)?Reset:Nothing
+
+	Reset
+		AdvMap -> 
+			 pg->start_peering_interval(..)
+				 init_primary_up_acting(..)
+				 // did acting, up, primary|acker change?
+				 ...
+				 // did primary change?
+				 ...
+		ActMap -> Started
+		
+	Primary
+		NeedActingChange -> WaitActingChange
+		
+	Peering
+		pg->state_set(PG_STATE_PEERING);
+		
+		Activate -> Active
+		AdvMap -> Reset
+		
+	Backfilling
+		pg->osd->queue_for_recovery(pg);
+
+		RemoteReservationRejected 
+			pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+			pg->state_set(PG_STATE_BACKFILL_TOOFULL);
+			-> NotBackfilling
+		Backfilled -> Recovered
+		
+	WaitRemoteBackfillReserved
+		RemoteReservationRejected
+		AllBackfillsReserved -> Backfilling
+		RemoteBackfillReserved -> 
+			if(){
+				if(){
+					pg->osd->send_message_osd_cluster(new MBackfillReserve(..)..)
+				}else{
+					post_event(RemoteBackfillReserved());
+				}
+			}else{
+				post_event(AllBackfillsReserved());
+			}
+
+	WaitLocalBackfillReserved
+		LocalBackfillReserved -> WaitRemoteBackfillReserved
+
+	NotBackfilling & Activating
+		RequestBackfill -> WaitLocalBackfillReserved
+		
+
+	Active
+		AdvMap -> 
+		ActMap ->
+		MNotifyRec -> 
+		MInfoRec -> 
+		MLogRec -> 
+		AllReplicasActivated -> 
+
+	Activating
+		AllReplicasRecovered, Recovered
+		DoRecovery, WaitLocalRecoveryReserved
+		RequestBackfill, WaitLocalBackfillReserved
+
+	ReplicaActive
+
+	Stray
+
+	Recovering
+		pg->osd->queue_for_recovery(pg);
+
+		AllReplicasRecovered -> Recovered
+		RequestBackfill -> WaitRemoteBackfillReserved
+
+	WaitRemoteRecoveryReserved
+		RemoteRecoveryReserved -> 
+		AllRemotesReserved -> Recovering
+
+	WaitLocalRecoveryReserved
+		LocalRecoveryReserved -> WaitRemoteRecoveryReserved
+
+	Clean & Activating
+		DoRecovery -> WaitLocalRecoveryReserved
+		
+	Clean
+		DoRecovery -> WaitLocalRecoveryReserved
+		
+	-------
+	pg->osd->queue_for_recovery(pg);
+		OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
+			bool more = pg->start_recovery_ops(max, &rctx, handle, &started);
+				ReplicatedPG::start_recovery_ops(..)
+					recover_replicas(..)
+						started += prep_object_replica_pushes(soid, r->second.need, h);
+						pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority)
+
+					recover_primary(..)
+						pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+					
+					recover_backfill(..)
+
+					if started < max
+						RequestBackfill()   // so, backfill is a special case for recoverying, when normal reovery cannot succeed
+						
+	------
+
+	/*
+		according to https://github.com/ceph/ceph/blob/master/doc/dev/osd_internals/recovery_reservation.rst
+		there are two kinds of recovery: log-based recovery and backfill
+		recover_replica() & recover_primary() try to do log-based recovery
+		recover_backfill() does backfill recovery.
+		backfill is to copy all objects instead of log
+	*/
+
+	//TODO PG:Activate() read and get to know recovery/backfill
+
+	//TOOD how snap works, snapmanager
+					
+16. OSD Scrubbing
+    "Silent data corruption caused by hardware can be a big issue on a large data store. RADOS offers a scrubbing feature" 
+    
+    "Regular scrubbing is lighter and checks that the object is correctly replicated among the nodes. It also checks the object’s metadata and attributes. Deep scrubbing is heavier and expands the check to the actual data."
+
+    "It ensures data integrity by reading the data and computing checksums."
+    	-- https://www.usenix.org/system/files/login/articles/02_giannakos.pdf
+
+   	in swift, the same thing is done by "Auditor"
+
+    	// register scrubbing
+    	pg->reg_next_scrub();
+    		osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+
+    	// schedule scrubbing
+    	OSD::tick()
+    		OSD::sched_scrub();
+    			PG::sched_scrub()
+    				queue_scrub();
+    					state_set(PG_STATE_SCRUBBING);
+    					osd->queue_for_scrub(this)
+
+    	// do scrubbing
+    	OSD::ScrubWQ::_process()
+			pg->scrub(handle);
+				if (scrubber.is_chunky) {
+					chunky_scrub(handle);
+						while (!done) {
+							switch (scrubber.state) {
+      							case PG::Scrubber::INACTIVE:
+      								scrubber.state = PG::Scrubber::NEW_CHUNK;
+      							case PG::Scrubber::NEW_CHUNK:
+      							...
+      							...
+      							case PG::Scrubber::COMPARE_MAPS:
+      							case PG::Scrubber::FINISH:
+      						}
+						}
+				} else {
+					classic_scrub(handle);
+						...
+				}
+
+17. PGBackend::objects_list_partial()
+		ObjectStore::collection_list_partial()
+    PGBackend::objects_list_range()
+    	ObjectStore::collection_list_range()
+
+    ObjectStore::collection_list_partial()
+    ObjectStore::collection_list_range()
+
+    ObjectStore::get_ideal_list_min()
+    ObjectStore::get_ideal_list_max()
+
+    	@see ObjectStore.h, detailed comments
+
+18. PG startup process
+		PG::PG() 
+			... // do nothing
+		PG::init()
+			... // set role, actiing set
+		
+		PG::activate()
+			state_set(PG_STATE_ACTIVE);
+			... // log, recovery, backfill stuff
+
+19. snap mechanism
+
+19.5 ondisk object structure
+	1. object_t
+	   snapid_t
+
+	   sobject_t = object_t + snapid_t (snapped object)
+	   hobject_t = object_t + snapid_t + hash (hashed object)
+	   ghobject_t = hobject_t + gen_t + shard_t (generationed object)
+	   		gen_t = version_t
+	   		shard_t = uint8_t
+
+	   	coll_t = str (collection)
+	
+20. osd io path
+	// TODO http://blog.sina.com.cn/s/blog_c2e1a9c7010151xb.html
+
+
+
